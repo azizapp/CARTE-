@@ -198,7 +198,7 @@ const parseVisitDate = (dateString: string): Date | null => {
 interface StoreFormPageProps {
     onClose: () => void;
     onSubmit: (storeData: StoreFormData | Store) => void;
-    storeToEdit?: Store | null;
+    storeToEdit?: StoreFormData | Store | null;
     stores: Store[];
 }
 
@@ -315,7 +315,26 @@ const StoreFormPage: React.FC<StoreFormPageProps> = ({ onClose, onSubmit, storeT
         }
     }
     
-    setFormData(prev => ({ ...prev, [name]: value }));
+    // Handle conditional fields clearing
+    if (name === 'Action-Client') {
+        const updatedState: StoreFormData = { ...formData, 'Action-Client': value };
+        if (value === 'Acheter') {
+            updatedState['Rendez-Vous'] = '';
+            setMeetingDate('');
+        } else if (value === 'Revisiter') {
+            updatedState.Prix = '';
+            updatedState.Quantité = '';
+        } else {
+            // If selection is cleared, clear all conditional fields
+            updatedState['Rendez-Vous'] = '';
+            setMeetingDate('');
+            updatedState.Prix = '';
+            updatedState.Quantité = '';
+        }
+        setFormData(updatedState);
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -324,6 +343,16 @@ const StoreFormPage: React.FC<StoreFormPageProps> = ({ onClose, onSubmit, storeT
     const combinedData = { ...formData, 'Rendez-Vous': meetingDate };
     onSubmit(combinedData);
   };
+  
+  const pageTitle = useMemo(() => {
+    if (storeToEdit && 'ID' in storeToEdit && storeToEdit.ID) {
+      return 'Modifier le Lead';
+    }
+    if (storeToEdit && storeToEdit.Magazin) {
+      return 'Nouveau Suivi';
+    }
+    return 'Nouveau Lead';
+  }, [storeToEdit]);
 
   const renderInput = (name: keyof StoreFormData, label: string, placeholder: string, Icon: React.FC<any>, type = 'text', required = false) => (
     <div>
@@ -358,7 +387,7 @@ const StoreFormPage: React.FC<StoreFormPageProps> = ({ onClose, onSubmit, storeT
                 <button type="button" onClick={onClose} className="absolute left-4 top-0 bottom-0 flex items-center">
                     <ArrowLeftIcon className="w-6 h-6 text-slate-700 dark:text-slate-200" />
                 </button>
-                <h1 className="text-lg font-semibold text-slate-900 dark:text-white">{storeToEdit ? 'Modifier le Lead' : 'Nouveau Lead'}</h1>
+                <h1 className="text-lg font-semibold text-slate-900 dark:text-white">{pageTitle}</h1>
             </div>
         </header>
 
@@ -547,24 +576,6 @@ const StoreFormPage: React.FC<StoreFormPageProps> = ({ onClose, onSubmit, storeT
 
                  <FormSection title="Détails Commerciaux" Icon={ClipboardDocumentCheckIcon}>
                     <div>
-                        <label htmlFor="Rendez-Vous" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                            Date de Rendez-vous
-                        </label>
-                        <div className="relative">
-                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                <CalendarDaysIcon className="h-5 w-5 text-slate-400" />
-                            </div>
-                            <input
-                                type="date"
-                                name="Rendez-Vous"
-                                id="Rendez-Vous"
-                                value={meetingDate}
-                                onChange={(e) => setMeetingDate(e.target.value)}
-                                className="block w-full rounded-md border-slate-300 bg-white py-2.5 pl-10 pr-3 shadow-sm focus:border-[var(--accent-color)] focus:ring-[var(--accent-color)] sm:text-sm dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                            />
-                        </div>
-                    </div>
-                    <div>
                         <label htmlFor="Action-Client" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                             Action à entreprendre
                         </label>
@@ -588,8 +599,34 @@ const StoreFormPage: React.FC<StoreFormPageProps> = ({ onClose, onSubmit, storeT
                             </div>
                         </div>
                     </div>
-                    {renderInput('Prix', 'Prix', '0.00 DH', CurrencyDollarIcon, 'number')}
-                    {renderInput('Quantité', 'Quantité', '0', CubeIcon, 'number')}
+                    
+                    {formData['Action-Client'] === 'Revisiter' && (
+                        <div>
+                            <label htmlFor="Rendez-Vous" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                Date de Rendez-vous
+                            </label>
+                            <div className="relative">
+                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                    <CalendarDaysIcon className="h-5 w-5 text-slate-400" />
+                                </div>
+                                <input
+                                    type="date"
+                                    name="Rendez-Vous"
+                                    id="Rendez-Vous"
+                                    value={meetingDate}
+                                    onChange={(e) => setMeetingDate(e.target.value)}
+                                    className="block w-full rounded-md border-slate-300 bg-white py-2.5 pl-10 pr-3 shadow-sm focus:border-[var(--accent-color)] focus:ring-[var(--accent-color)] sm:text-sm dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                                />
+                            </div>
+                        </div>
+                    )}
+                    
+                    {formData['Action-Client'] === 'Acheter' && (
+                        <>
+                            {renderInput('Prix', 'Prix', '0.00 DH', CurrencyDollarIcon, 'number')}
+                            {renderInput('Quantité', 'Quantité', '0', CubeIcon, 'number')}
+                        </>
+                    )}
                 </FormSection>
                 
                 <FormSection title="Suivi" Icon={CalendarDaysIcon}>

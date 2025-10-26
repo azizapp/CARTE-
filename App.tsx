@@ -9,7 +9,8 @@ import PlusIcon from './components/icons/PlusIcon.tsx';
 import ProspectDetailPage from './components/ProspectDetailPage.tsx';
 import FilterModal from './components/FilterModal.tsx';
 import SettingsIcon from './components/icons/SettingsIcon.tsx';
-import UserEmailSetup from './components/UserEmailSetup.tsx';
+import LoginPage from './components/LoginPage.tsx';
+import ConnectionStatusHeaderIcon from './components/icons/ConnectionStatusHeaderIcon.tsx';
 
 const SearchIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
@@ -95,16 +96,16 @@ const App: React.FC = () => {
   const [font, setFont] = useState<string>('Inter');
   const [accentColor, setAccentColor] = useState<string>('#4f46e5');
   const [currentPage, setCurrentPage] = useState<Page>('list');
-  const [storeToEdit, setStoreToEdit] = useState<Store | null>(null);
+  const [formInitialData, setFormInitialData] = useState<StoreFormData | Store | null>(null);
   const [storeToDelete, setStoreToDelete] = useState<Store | null>(null);
   const [selectedStore, setSelectedStore] = useState<Store | null>(null);
   const [isOnline, setIsOnline] = useState(true);
   const [scriptUrl, setScriptUrl] = useState<string | undefined>();
+  const [authScriptUrl, setAuthScriptUrl] = useState<string | undefined>();
   const [searchQuery, setSearchQuery] = useState('');
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState<FilterState>(initialFilterState);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [authenticatedUser, setAuthenticatedUser] = useState<string | null>(null);
 
   useEffect(() => {
     const loadConfigAndTheme = async () => {
@@ -114,6 +115,7 @@ const App: React.FC = () => {
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const configData = await response.json();
         setScriptUrl(configData.scriptUrl);
+        setAuthScriptUrl(configData.authScriptUrl);
       } catch (e) {
         console.error("Failed to load application configuration:", e);
         setError("Could not load application configuration. Production mode may be unavailable.");
@@ -142,13 +144,14 @@ const App: React.FC = () => {
         setMode(savedMode);
       }
 
-      // Load user email
-      const savedEmail = localStorage.getItem('userEmail');
-      if (savedEmail) {
-        setUserEmail(savedEmail);
-      } else {
-        setIsEmailModalOpen(true);
+      // Check for existing session
+      const sessionUser = sessionStorage.getItem('authenticatedUser');
+      if (sessionUser) {
+          setAuthenticatedUser(sessionUser);
       }
+      // Finished initial config loading. If not authenticated, login page will show.
+      // If authenticated, store fetching will be triggered by useEffect.
+      setIsLoading(false);
     };
     loadConfigAndTheme();
   }, []);
@@ -178,6 +181,10 @@ const App: React.FC = () => {
 
 
   const fetchStores = useCallback(async () => {
+    if (!authenticatedUser) {
+        setIsLoading(false);
+        return;
+    }
     if (mode === Mode.Production && !scriptUrl) {
       setIsLoading(false);
       return;
@@ -199,16 +206,30 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [mode, scriptUrl]);
+  }, [mode, scriptUrl, authenticatedUser]);
 
   useEffect(() => {
-    fetchStores();
-  }, [fetchStores]);
+    if (authenticatedUser) {
+      fetchStores();
+    }
+  }, [fetchStores, authenticatedUser]);
+
+  const handleLoginSuccess = (username: string) => {
+    setAuthenticatedUser(username);
+    sessionStorage.setItem('authenticatedUser', username);
+  };
+  
+  const handleLogout = () => {
+    setAuthenticatedUser(null);
+    sessionStorage.removeItem('authenticatedUser');
+    setStores([]); // Clear data on logout
+    setCurrentPage('list'); // Reset to default page
+  };
 
   const handleFormSubmit = (storeData: StoreFormData | Store) => {
     // Navigate back to the list page immediately
     setCurrentPage('list');
-    setStoreToEdit(null);
+    setFormInitialData(null);
 
     // Define an async function to handle the submission in the background
     const backgroundSubmit = async () => {
@@ -216,7 +237,7 @@ const App: React.FC = () => {
         if ('ID' in storeData && storeData.ID) {
           await storeService.updateStore(mode, storeData as Store, scriptUrl);
         } else {
-          await storeService.addStore(mode, storeData, scriptUrl, userEmail || undefined);
+          await storeService.addStore(mode, storeData, scriptUrl, authenticatedUser || undefined);
         }
         // After successful submission, refresh the store list to show the new data
         await fetchStores();
@@ -228,12 +249,6 @@ const App: React.FC = () => {
 
     // Call the background submission function without awaiting it
     backgroundSubmit();
-  };
-
-  const handleSaveEmail = (email: string) => {
-    localStorage.setItem('userEmail', email);
-    setUserEmail(email);
-    setIsEmailModalOpen(false);
   };
 
   const handleOpenDeleteModal = (store: Store) => {
@@ -256,11 +271,6 @@ const App: React.FC = () => {
       setIsLoading(false);
       setStoreToDelete(null);
     }
-  };
-
-  const handleEditStore = (store: Store) => {
-    setStoreToEdit(store);
-    setCurrentPage('form');
   };
 
   const handleViewDetails = (representativeStore: Store) => {
@@ -308,9 +318,38 @@ const App: React.FC = () => {
     setCurrentPage('list');
   };
   
-  const handleEditFromDetails = (store: Store) => {
+  const handleAddFollowupFromDetails = (baseStore: Store) => {
+    const allRecordsForStore = stores
+      .filter(s => s.Magazin === baseStore.Magazin)
+      .sort((a, b) => {
+        const dateA = a['Date-Heure'] ? parseVisitDate(a['Date-Heure'])?.getTime() ?? 0 : 0;
+        const dateB = b['Date-Heure'] ? parseVisitDate(b['Date-Heure'])?.getTime() ?? 0 : 0;
+        return dateB - dateA;
+      });
+    const latestRecord = allRecordsForStore.length > 0 ? allRecordsForStore[0] : baseStore;
+
+    const followUpTemplate: StoreFormData = {
+      Magazin: latestRecord.Magazin,
+      Gérant: latestRecord.Gérant,
+      Localisation: latestRecord.Localisation,
+      Ville: latestRecord.Ville,
+      Région: latestRecord.Région,
+      Adresse: latestRecord.Adresse,
+      GSM: latestRecord.GSM,
+      Phone: latestRecord.Phone,
+      Email: latestRecord.Email,
+      Gamme: latestRecord.Gamme,
+      Note: '',
+      Image: '',
+      'Action-Client': '',
+      'Rendez-Vous': '',
+      Prix: '',
+      Quantité: '',
+    };
+    
+    setFormInitialData(followUpTemplate as Store);
+    setCurrentPage('form');
     setSelectedStore(null);
-    handleEditStore(store);
   };
 
   const handleDeleteFromDetails = (store: Store) => {
@@ -320,12 +359,12 @@ const App: React.FC = () => {
   };
 
   const handleAddNew = () => {
-    setStoreToEdit(null);
+    setFormInitialData(null);
     setCurrentPage('form');
   };
 
   const handleCloseForm = () => {
-    setStoreToEdit(null);
+    setFormInitialData(null);
     setCurrentPage('list');
   };
 
@@ -420,10 +459,27 @@ const App: React.FC = () => {
     return representativeStores;
   }, [stores, searchQuery, activeFilters]);
 
+  if (!authenticatedUser) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+        {isLoading ? (
+          <div className="flex justify-center items-center h-screen">
+            <svg className="animate-spin h-8 w-8 text-slate-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+        ) : (
+          <LoginPage onLoginSuccess={handleLoginSuccess} authScriptUrl={authScriptUrl} />
+        )}
+      </div>
+    );
+  }
+
   const renderContent = () => {
     switch (currentPage) {
       case 'form':
-        return <StoreFormPage onClose={handleCloseForm} onSubmit={handleFormSubmit} storeToEdit={storeToEdit} stores={stores} />;
+        return <StoreFormPage onClose={handleCloseForm} onSubmit={handleFormSubmit} storeToEdit={formInitialData} stores={stores} />;
       case 'settings':
         return <SettingsPage 
                 theme={theme} setTheme={setTheme} 
@@ -435,13 +491,14 @@ const App: React.FC = () => {
                 onRefresh={fetchStores}
                 isLoading={isLoading}
                 onResetSettings={handleResetSettings}
+                onLogout={handleLogout}
                />;
       case 'detail':
         if (!selectedStore) {
           setCurrentPage('list'); // Should not happen, but as a safeguard
           return null;
         }
-        return <ProspectDetailPage store={selectedStore} onClose={handleCloseDetails} onEdit={handleEditFromDetails} onDelete={handleDeleteFromDetails} />;
+        return <ProspectDetailPage store={selectedStore} onClose={handleCloseDetails} onAddFollowup={handleAddFollowupFromDetails} onDelete={handleDeleteFromDetails} />;
       case 'list':
       default:
         return (
@@ -482,6 +539,9 @@ const App: React.FC = () => {
                     >
                       <FilterIcon className="h-5 w-5" />
                     </button>
+                    <div className="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700">
+                        <ConnectionStatusHeaderIcon connected={isOnline} />
+                    </div>
                     <button
                         type="button"
                         className="p-2.5 rounded-lg text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
@@ -537,11 +597,6 @@ const App: React.FC = () => {
         onClear={handleClearFilters}
         currentFilters={activeFilters}
         stores={stores}
-      />
-
-      <UserEmailSetup
-        isOpen={isEmailModalOpen}
-        onSave={handleSaveEmail}
       />
     </div>
   );

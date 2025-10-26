@@ -36,10 +36,11 @@ interface SettingsPageProps {
   onRefresh: () => void;
   isLoading: boolean;
   onResetSettings: () => void;
+  onLogout: () => void;
 }
 
 const SettingsPage: React.FC<SettingsPageProps> = ({ 
-  theme, setTheme, font, setFont, accentColor, setAccentColor, onClose, mode, setMode, isOnline, onRefresh, isLoading, onResetSettings 
+  theme, setTheme, font, setFont, accentColor, setAccentColor, onClose, mode, setMode, isOnline, onRefresh, isLoading, onResetSettings, onLogout
 }) => {
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   
@@ -126,6 +127,24 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                   </select>
                 </li>
               </ul>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 px-4 mb-2">Compte</h2>
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm overflow-hidden">
+                <div className="p-4 flex items-center justify-between">
+                    <div>
+                        <p className="font-medium text-slate-800 dark:text-slate-100">Se déconnecter</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Vous serez redirigé vers la page de connexion.</p>
+                    </div>
+                    <button 
+                        onClick={onLogout}
+                        className="px-4 py-2 text-sm font-semibold rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                    >
+                        Déconnexion
+                    </button>
+                </div>
             </div>
           </section>
 

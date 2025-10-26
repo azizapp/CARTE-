@@ -67,7 +67,7 @@ const ClipboardDocumentCheckIcon: React.FC<React.SVGProps<SVGSVGElement>> = (pro
 interface ProspectDetailPageProps {
   store: Store;
   onClose: () => void;
-  onEdit: (store: Store) => void;
+  onAddFollowup: (store: Store) => void;
   onDelete: (store: Store) => void;
 }
 
@@ -126,7 +126,7 @@ const parseVisitDate = (dateString: string): Date | null => {
 };
 
 
-const ProspectDetailPage: React.FC<ProspectDetailPageProps> = ({ store, onClose, onEdit, onDelete }) => {
+const ProspectDetailPage: React.FC<ProspectDetailPageProps> = ({ store, onClose, onAddFollowup, onDelete }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
 
@@ -169,7 +169,7 @@ const ProspectDetailPage: React.FC<ProspectDetailPageProps> = ({ store, onClose,
               </button>
               <h1 className="text-lg font-semibold">Lead Details</h1>
               <div className="flex items-center gap-2">
-                <button onClick={() => onEdit(store)} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700">
+                <button onClick={() => onAddFollowup(store)} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700" title="Add Follow-up">
                   <PencilIcon className="w-6 h-6" />
                 </button>
                 <div className="relative">
@@ -212,22 +212,29 @@ const ProspectDetailPage: React.FC<ProspectDetailPageProps> = ({ store, onClose,
             )}
           </div>
 
-          {/* Photo Card */}
-          {store.Image && (
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Photo</h3>
+          {/* Image Section */}
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Image</h3>
+              {store.Image && (
                 <a href={store.Image} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500">
                   Voir en grand
                 </a>
-              </div>
+              )}
+            </div>
+            {store.Image ? (
               <img 
                 src={store.Image} 
                 alt={`${store.Magazin} storefront or business card`} 
                 className="w-full h-auto max-h-64 object-contain rounded-lg bg-slate-100 dark:bg-slate-700" 
               />
-            </div>
-          )}
+            ) : (
+                <div className="text-center py-10 px-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                    <h3 className="text-base font-medium text-slate-900 dark:text-white">Aucune image</h3>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Aucune photo n'a été ajoutée pour ce prospect.</p>
+                </div>
+            )}
+          </div>
 
           {/* Contact Information Card */}
           {store.Gérant && (
@@ -336,9 +343,9 @@ const ProspectDetailPage: React.FC<ProspectDetailPageProps> = ({ store, onClose,
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Notes</h3>
-                <button onClick={() => onEdit(store)} className="inline-flex items-center gap-2 text-sm font-medium py-1 px-3 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200">
+                <button onClick={() => onAddFollowup(store)} className="inline-flex items-center gap-2 text-sm font-medium py-1 px-3 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200">
                   <PencilIcon className="w-4 h-4" />
-                  Edit
+                  Add Note
                 </button>
               </div>
               <p className="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap leading-relaxed">
@@ -355,7 +362,7 @@ const ProspectDetailPage: React.FC<ProspectDetailPageProps> = ({ store, onClose,
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Historique des Suivis</h3>
-                <button onClick={() => onEdit(store)} className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500">
+                <button onClick={() => onAddFollowup(store)} className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500">
                   + Ajouter un suivi
                 </button>
               </div>
@@ -411,9 +418,9 @@ const ProspectDetailPage: React.FC<ProspectDetailPageProps> = ({ store, onClose,
               <CalendarDaysIcon className="w-6 h-6 mb-1" />
               <span className="text-xs font-semibold">Schedule</span>
             </button>
-            <button onClick={() => onEdit(store)} className="flex flex-col items-center justify-center p-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-              <PencilIcon className="w-6 h-6 mb-1" />
-              <span className="text-xs font-semibold">Edit</span>
+            <button onClick={() => onAddFollowup(store)} className="flex flex-col items-center justify-center p-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+              <DocumentPlusIcon className="w-6 h-6 mb-1" />
+              <span className="text-xs font-semibold">Suivi</span>
             </button>
           </div>
         </div>
