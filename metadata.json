@@ -1,5 +1,5 @@
 {
-  "name": "Carte Visit 5.6",
+  "name": "Carte Visit 5.7",
   "description": "An application to manage store data, with options to store data locally for testing or synchronize with Google Sheets for production use.",
   "requestFramePermissions": [
     "camera",

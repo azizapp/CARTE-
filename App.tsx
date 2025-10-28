@@ -1,16 +1,18 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Store, Mode, StoreFormData } from './types.ts';
 import storeService from './services/storeService.ts';
 import StoreTable from './components/StoreTable.tsx';
 import StoreFormPage from './components/StoreFormPage.tsx';
 import SettingsPage from './components/SettingsPage.tsx';
-import ConfirmationModal from './components/ConfirmationModal.tsx';
 import PlusIcon from './components/icons/PlusIcon.tsx';
 import ProspectDetailPage from './components/ProspectDetailPage.tsx';
 import FilterModal from './components/FilterModal.tsx';
 import SettingsIcon from './components/icons/SettingsIcon.tsx';
 import LoginPage from './components/LoginPage.tsx';
 import ConnectionStatusHeaderIcon from './components/icons/ConnectionStatusHeaderIcon.tsx';
+import UpcomingAppointmentsIcon from './components/icons/UpcomingAppointmentsIcon.tsx';
+import AppointmentsPage from './components/AppointmentsPage.tsx';
+import EllipsisVerticalIcon from './components/icons/EllipsisVerticalIcon.tsx';
 
 const SearchIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
@@ -31,7 +33,7 @@ const XCircleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 );
 
 type Theme = 'light' | 'dark';
-type Page = 'list' | 'form' | 'settings' | 'detail';
+type Page = 'list' | 'form' | 'settings' | 'detail' | 'appointments';
 
 export type FilterState = {
   city: string;
@@ -97,7 +99,6 @@ const App: React.FC = () => {
   const [accentColor, setAccentColor] = useState<string>('#4f46e5');
   const [currentPage, setCurrentPage] = useState<Page>('list');
   const [formInitialData, setFormInitialData] = useState<StoreFormData | Store | null>(null);
-  const [storeToDelete, setStoreToDelete] = useState<Store | null>(null);
   const [selectedStore, setSelectedStore] = useState<Store | null>(null);
   const [isOnline, setIsOnline] = useState(true);
   const [scriptUrl, setScriptUrl] = useState<string | undefined>();
@@ -106,6 +107,8 @@ const App: React.FC = () => {
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState<FilterState>(initialFilterState);
   const [authenticatedUser, setAuthenticatedUser] = useState<string | null>(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadConfigAndTheme = async () => {
@@ -179,6 +182,17 @@ const App: React.FC = () => {
     localStorage.setItem('mode', mode);
   }, [mode]);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+        if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+            setIsMenuOpen(false);
+        }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [menuRef]);
 
   const fetchStores = useCallback(async () => {
     if (!authenticatedUser) {
@@ -251,28 +265,6 @@ const App: React.FC = () => {
     backgroundSubmit();
   };
 
-  const handleOpenDeleteModal = (store: Store) => {
-    setStoreToDelete(store);
-  };
-  
-  const handleCloseDeleteModal = () => {
-    setStoreToDelete(null);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!storeToDelete) return;
-    setIsLoading(true);
-    try {
-      await storeService.deleteStore(mode, storeToDelete.ID, scriptUrl);
-      await fetchStores();
-    } catch (e: any) {
-      setError(e.message || "Failed to delete data.");
-    } finally {
-      setIsLoading(false);
-      setStoreToDelete(null);
-    }
-  };
-
   const handleViewDetails = (representativeStore: Store) => {
     const allRecordsForStore = stores
         .filter(s => s.Magazin === representativeStore.Magazin)
@@ -289,9 +281,12 @@ const App: React.FC = () => {
     }
 
     const latestRecord = allRecordsForStore[0];
+    const recordWithImage = allRecordsForStore.find(s => s.Image);
+    const latestImage = recordWithImage ? recordWithImage.Image : undefined;
 
     const mergedStore: Store = {
         ...latestRecord,
+        Image: latestImage,
         'Date-Heure': allRecordsForStore
             .map(s => s['Date-Heure'])
             .filter(Boolean)
@@ -350,12 +345,6 @@ const App: React.FC = () => {
     setFormInitialData(followUpTemplate as Store);
     setCurrentPage('form');
     setSelectedStore(null);
-  };
-
-  const handleDeleteFromDetails = (store: Store) => {
-    setSelectedStore(null);
-    setCurrentPage('list');
-    handleOpenDeleteModal(store);
   };
 
   const handleAddNew = () => {
@@ -458,6 +447,29 @@ const App: React.FC = () => {
 
     return representativeStores;
   }, [stores, searchQuery, activeFilters]);
+  
+  const upcomingAppointmentsCount = useMemo(() => {
+    if (!stores) return 0;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const uniqueAppointments = new Set<string>();
+
+    stores.forEach(store => {
+      if (store['Rendez-Vous']) {
+          const dateStrings = store['Rendez-Vous'].split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+          dateStrings.forEach(dateStr => {
+            const appointmentDate = new Date(dateStr);
+            if (!isNaN(appointmentDate.getTime()) && appointmentDate >= today) {
+                const key = `${store.Magazin}-${dateStr}`;
+                uniqueAppointments.add(key);
+            }
+          });
+      }
+    });
+    return uniqueAppointments.size;
+  }, [stores]);
 
   if (!authenticatedUser) {
     return (
@@ -478,6 +490,8 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (currentPage) {
+      case 'appointments':
+        return <AppointmentsPage stores={stores} onClose={() => setCurrentPage('list')} />;
       case 'form':
         return <StoreFormPage onClose={handleCloseForm} onSubmit={handleFormSubmit} storeToEdit={formInitialData} stores={stores} />;
       case 'settings':
@@ -498,7 +512,7 @@ const App: React.FC = () => {
           setCurrentPage('list'); // Should not happen, but as a safeguard
           return null;
         }
-        return <ProspectDetailPage store={selectedStore} onClose={handleCloseDetails} onAddFollowup={handleAddFollowupFromDetails} onDelete={handleDeleteFromDetails} />;
+        return <ProspectDetailPage store={selectedStore} onClose={handleCloseDetails} onAddFollowup={handleAddFollowupFromDetails} />;
       case 'list':
       default:
         return (
@@ -528,7 +542,7 @@ const App: React.FC = () => {
                             title="Effacer les filtres"
                         >
                             <XCircleIcon className="h-4 w-4" />
-                            <span>Effacer</span>
+                            <span className="hidden sm:inline">Effacer</span>
                         </button>
                     )}
                     <button
@@ -539,17 +553,71 @@ const App: React.FC = () => {
                     >
                       <FilterIcon className="h-5 w-5" />
                     </button>
-                    <div className="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700">
-                        <ConnectionStatusHeaderIcon connected={isOnline} />
+                    
+                    {/* Icons for larger screens */}
+                    <div className="hidden sm:flex items-center gap-2">
+                        <div className="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700">
+                            <ConnectionStatusHeaderIcon connected={isOnline} />
+                        </div>
+                        <button
+                            type="button"
+                            className="p-2.5 rounded-lg text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                            title="Rendez-vous à venir"
+                            onClick={() => setCurrentPage('appointments')}
+                        >
+                            <UpcomingAppointmentsIcon count={upcomingAppointmentsCount} />
+                        </button>
+                        <button
+                            type="button"
+                            className="p-2.5 rounded-lg text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                            title="Réglages"
+                            onClick={() => setCurrentPage('settings')}
+                        >
+                            <SettingsIcon className="h-5 w-5" />
+                        </button>
                     </div>
-                    <button
-                        type="button"
-                        className="p-2.5 rounded-lg text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                        title="Réglages"
-                        onClick={() => setCurrentPage('settings')}
-                      >
-                        <SettingsIcon className="h-5 w-5" />
-                      </button>
+
+                    {/* Icons and menu for smaller screens */}
+                    <div className="sm:hidden flex items-center gap-2">
+                        <div className="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700">
+                            <ConnectionStatusHeaderIcon connected={isOnline} />
+                        </div>
+                        <div className="relative" ref={menuRef}>
+                            <button
+                                type="button"
+                                className="p-2.5 rounded-lg text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                                title="Menu"
+                                onClick={() => setIsMenuOpen(prev => !prev)}
+                            >
+                                <EllipsisVerticalIcon className="h-5 w-5" />
+                            </button>
+                            {isMenuOpen && (
+                                <div className="absolute right-0 mt-2 w-56 origin-top-right rounded-md bg-white dark:bg-slate-700 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-20">
+                                    <div className="py-1" role="menu" aria-orientation="vertical">
+                                        <button 
+                                            onClick={() => { setCurrentPage('appointments'); setIsMenuOpen(false); }}
+                                            className="w-full text-left flex items-center justify-between px-4 py-3 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600"
+                                            role="menuitem"
+                                        >
+                                            <span>Rendez-vous à venir</span>
+                                            {upcomingAppointmentsCount > 0 && (
+                                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">
+                                                    {upcomingAppointmentsCount > 9 ? '9+' : upcomingAppointmentsCount}
+                                                </span>
+                                            )}
+                                        </button>
+                                        <button
+                                            onClick={() => { setCurrentPage('settings'); setIsMenuOpen(false); }}
+                                            className="w-full text-left flex items-center px-4 py-3 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600"
+                                            role="menuitem"
+                                        >
+                                            Réglages
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
                   </div>
                </header>
               
@@ -581,15 +649,6 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
       {renderContent()}
 
-      <ConfirmationModal
-        isOpen={!!storeToDelete}
-        onClose={handleCloseDeleteModal}
-        onConfirm={handleConfirmDelete}
-        title="Delete Store"
-        message={`Are you sure you want to delete "${storeToDelete?.Magazin}"? This action cannot be undone.`}
-        confirmText="Delete"
-      />
-      
       <FilterModal
         isOpen={isFilterModalOpen}
         onClose={() => setIsFilterModalOpen(false)}
@@ -598,6 +657,7 @@ const App: React.FC = () => {
         currentFilters={activeFilters}
         stores={stores}
       />
+
     </div>
   );
 };
